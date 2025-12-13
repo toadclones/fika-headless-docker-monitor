@@ -1,0 +1,11 @@
+services:
+  presence_manager:
+    build: .
+    container_name: fika_presence_manager
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - HEADLESS_CONTAINER_NAME=fika-headless
+      - SERVER_CONTAINER_NAME=fika-server
+      - SHUTDOWN_DELAY=300
