@@ -33,6 +33,8 @@ class FikaMonitor:
         self.shutdown_time: float = self.last_activity_time + self.shutdown_delay
         self.is_running = True
 
+        self.waiting_for_headless_start: bool = False
+
         self.sync_docker = SyncDocker()
         self.spt_server = SPTServer(self.server_container_name)
                 
@@ -45,7 +47,7 @@ class FikaMonitor:
         logger.info(f"Received signal {signum}, shutting down...")
         self.is_running = False
 
-    def activity_detected(self, msg: str):
+    async def activity_detected(self, msg: str):
         logger.info(f"Activity detected: {msg}")
         self.last_activity_time = self.current_time
         self.shutdown_time = self.last_activity_time + self.shutdown_delay
@@ -53,7 +55,9 @@ class FikaMonitor:
         # immediately start container if not running
         container_status = self.sync_docker.get_container_status(self.headless_container_name)
         if container_status != "running":
+            self.waiting_for_headless_start = True
             self.sync_docker.start_container(self.headless_container_name)
+            await self.spt_server.fika_notification('Player activity detected, starting headless client...', 0)
 
     # TODO: monitor headless client logs as well?
     # One issue is reconnecting to the docker container on every restart
@@ -67,8 +71,13 @@ class FikaMonitor:
                 if not self.is_running:
                     break
                 
-                # Update last activity time
-                self.activity_detected(msg=activity_message)
+                if activity_message == 'headless_started':
+                    if self.waiting_for_headless_start:
+                        await self.spt_server.fika_notification('Headless client is available.', 5)
+                        self.waiting_for_headless_start = False
+                else:
+                    # Update last activity time
+                    await self.activity_detected(msg=activity_message)
 
                 await asyncio.sleep(0)
     
@@ -104,7 +113,7 @@ class FikaMonitor:
                 # it's time to shutdown, do a final check
                 players_online = await self.check_players_api()
                 if players_online > 0:
-                    self.activity_detected(msg=f'{players_online} players online, aborting shutdown')
+                    await self.activity_detected(msg=f'{players_online} players online, aborting shutdown')
                     continue
                 
                 if container_status == "running":

@@ -1,4 +1,5 @@
 import logging
+import json
 
 from typing import Any, Dict, List
 from aiohttp import ClientError, ClientSession, ClientTimeout
@@ -23,10 +24,9 @@ class SPTServer:
     async def fetch_online_players(self) -> List[Dict[str, Any]]:
         """Check for connected players via API."""
         try:
-            async with ClientSession() as session:
+            async with ClientSession(headers=self.headers) as session:
                 async with session.get(
                     url=f"https://{self.container_name}:6969/fika/presence/get",
-                    headers=self.headers,
                     ssl=False,  # Disable SSL verification (equivalent to -k)
                     timeout=ClientTimeout(total=10)
                 ) as response:
@@ -59,5 +59,35 @@ class SPTServer:
         except ClientError as e:
             logger.warning(f"Server did not pong: {e}")
             return False
+        
+    async def fika_notification(self, msg: str, icon: int):
+        """
+        Send notification to logged in users
+        icon: 0 = warning(green)
+              1 = error(red)
+              2 = person(white)
+              3 = mail(green)
+              4 = clipboard(green)
+              5 = checkmark(yellow)
+        """
+        payload = {
+            'notification': msg,
+            'notificationIcon': icon
+        }
+        try:
+            async with ClientSession(headers=self.headers) as session:
+                async with session.post(
+                    url=f"https://{self.container_name}:6969/fika/notification/push",
+                    ssl=False,  # Disable SSL verification (equivalent to -k)
+                    timeout=ClientTimeout(total=10),
+                    json=payload,
+                    compress=True
+                ) as response:
+                    if response.status == 200:
+                        logger.info(f'Notification sent: {msg}')
+                    else:
+                        logger.error(f"Notification request returned status {response.status}")
+        except ClientError as e:
+            logger.error(f"Notification request error: {e}")
     
 

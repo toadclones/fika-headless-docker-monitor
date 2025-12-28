@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import traceback
+import time
+import re
 
 from typing import AsyncGenerator
 from aiodocker import Docker
@@ -22,6 +24,7 @@ class AsyncLogMonitor:
         )
         self.container: DockerContainer = None
         self.is_running = True
+        self.start_time = time.time()
 
         # TODO: put this in env variables?
         self.activity_messages = [
@@ -62,7 +65,8 @@ class AsyncLogMonitor:
                 stdout=True,
                 stderr=True,
                 follow=True,
-                timestamps=False
+                timestamps=False,
+                since=self.start_time
             ):
                 if not self.is_running:
                     break
@@ -80,6 +84,9 @@ class AsyncLogMonitor:
             for activity_message in self.activity_messages:
                 if activity_message in line:
                     yield activity_message
+            
+            if re.search('(headless_).*(has connected)', line):
+                yield 'headless_started'
             await asyncio.sleep(0)
     
     async def close(self):
